@@ -46,6 +46,11 @@ class Secure_Notepad_Storage_Pro {
         $this->register_hooks();
         // Đăng ký API endpoint tạo ghi chú mới
 add_action('wp_ajax_create_notepad', array('SNSP_API_Controller', 'create_notepad'));
+        // Đăng ký API endpoint cho chức năng chia sẻ
+add_action('wp_ajax_search_users', array('SNSP_API_Controller', 'search_users'));
+add_action('wp_ajax_share_notepad', array('SNSP_API_Controller', 'share_notepad'));
+add_action('wp_ajax_unshare_notepad', array('SNSP_API_Controller', 'unshare_notepad'));
+add_action('wp_ajax_get_shared_users', array('SNSP_API_Controller', 'get_shared_users'));
     }
     
     // Load các file phụ thuộc
