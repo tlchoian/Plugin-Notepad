@@ -343,4 +343,221 @@ class SNSP_API_Controller {
             return new WP_Error('db_error', 'Error creating notepad', array('status' => 500));
         }
     }
+// Phương thức tìm kiếm người dùng để chia sẻ
+    public static function search_users() {
+        if (!is_user_logged_in()) {
+            return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+        }
+        
+        $keyword = isset($_GET['keyword']) ? sanitize_text_field($_GET['keyword']) : '';
+        if (empty($keyword) || strlen($keyword) < 3) {
+            return new WP_Error('invalid_keyword', 'Từ khóa tìm kiếm phải có ít nhất 3 ký tự', array('status' => 400));
+        }
+        
+        // Sử dụng User Manager để tìm kiếm người dùng
+        $user_manager = new SNSP_User_Manager();
+        $users = $user_manager->search_users($keyword);
+        
+        return array(
+            'status' => 200,
+            'users' => $users
+        );
+    }
+    
+    // Phương thức chia sẻ ghi chú
+    public static function share_notepad() {
+        if (!is_user_logged_in()) {
+            return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+        }
+        
+        $notepad_id = isset($_POST['notepad_id']) ? intval($_POST['notepad_id']) : 0;
+        $user_id = isset($_POST['user_id']) ? intval($_POST['user_id']) : 0;
+        $can_edit = isset($_POST['can_edit']) ? (bool) $_POST['can_edit'] : false;
+        
+        if (!$notepad_id || !$user_id) {
+            return new WP_Error('missing_params', 'Thiếu thông tin cần thiết', array('status' => 400));
+        }
+        
+        // Kiểm tra quyền sở hữu ghi chú
+        global $wpdb;
+        $table_notepads = $wpdb->prefix . 'secure_notepads_pro';
+        $current_user_id = get_current_user_id();
+        
+        $notepad = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT id FROM $table_notepads WHERE id = %d AND user_id = %d",
+                $notepad_id, $current_user_id
+            )
+        );
+        
+        if (!$notepad) {
+            return new WP_Error('not_owner', 'Bạn không có quyền chia sẻ ghi chú này', array('status' => 403));
+        }
+        
+        // Kiểm tra xem đã chia sẻ với người dùng này chưa
+        $table_shares = $wpdb->prefix . 'secure_notepad_pro_shares';
+        $existing_share = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT id FROM $table_shares WHERE notepad_id = %d AND shared_with_id = %d",
+                $notepad_id, $user_id
+            )
+        );
+        
+        // Tạo key chia sẻ ngẫu nhiên
+        $share_key = wp_generate_password(32, false);
+        
+        if ($existing_share) {
+            // Cập nhật quyền nếu đã chia sẻ
+            $result = $wpdb->update(
+                $table_shares,
+                array(
+                    'can_edit' => $can_edit ? 1 : 0,
+                    'share_key' => $share_key
+                ),
+                array('id' => $existing_share->id),
+                array('%d', '%s'),
+                array('%d')
+            );
+        } else {
+            // Tạo bản ghi chia sẻ mới
+            $result = $wpdb->insert(
+                $table_shares,
+                array(
+                    'notepad_id' => $notepad_id,
+                    'owner_id' => $current_user_id,
+                    'shared_with_id' => $user_id,
+                    'can_edit' => $can_edit ? 1 : 0,
+                    'share_key' => $share_key,
+                    'created_at' => current_time('mysql')
+                ),
+                array('%d', '%d', '%d', '%d', '%s', '%s')
+            );
+        }
+        
+        if ($result) {
+            // Lấy thông tin người dùng được chia sẻ
+            $shared_user = get_userdata($user_id);
+            
+            return array(
+                'status' => 200,
+                'message' => 'Chia sẻ thành công',
+                'user' => array(
+                    'id' => $user_id,
+                    'display_name' => $shared_user->display_name,
+                    'email' => $shared_user->user_email,
+                    'can_edit' => $can_edit
+                )
+            );
+        } else {
+            return new WP_Error('db_error', 'Lỗi khi chia sẻ ghi chú', array('status' => 500));
+        }
+    }
+    
+    // Phương thức hủy chia sẻ ghi chú
+    public static function unshare_notepad() {
+        if (!is_user_logged_in()) {
+            return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+        }
+        
+        $notepad_id = isset($_POST['notepad_id']) ? intval($_POST['notepad_id']) : 0;
+        $user_id = isset($_POST['user_id']) ? intval($_POST['user_id']) : 0;
+        
+        if (!$notepad_id || !$user_id) {
+            return new WP_Error('missing_params', 'Thiếu thông tin cần thiết', array('status' => 400));
+        }
+        
+        // Kiểm tra quyền sở hữu ghi chú
+        global $wpdb;
+        $table_notepads = $wpdb->prefix . 'secure_notepads_pro';
+        $current_user_id = get_current_user_id();
+        
+        $notepad = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT id FROM $table_notepads WHERE id = %d AND user_id = %d",
+                $notepad_id, $current_user_id
+            )
+        );
+        
+        if (!$notepad) {
+            return new WP_Error('not_owner', 'Bạn không có quyền hủy chia sẻ ghi chú này', array('status' => 403));
+        }
+        
+        // Xóa bản ghi chia sẻ
+        $table_shares = $wpdb->prefix . 'secure_notepad_pro_shares';
+        $result = $wpdb->delete(
+            $table_shares,
+            array(
+                'notepad_id' => $notepad_id,
+                'shared_with_id' => $user_id,
+                'owner_id' => $current_user_id
+            ),
+            array('%d', '%d', '%d')
+        );
+        
+        if ($result) {
+            return array(
+                'status' => 200,
+                'message' => 'Đã hủy chia sẻ thành công'
+            );
+        } else {
+            return new WP_Error('db_error', 'Lỗi khi hủy chia sẻ ghi chú', array('status' => 500));
+        }
+    }
+    
+    // Phương thức lấy danh sách người dùng được chia sẻ
+    public static function get_shared_users() {
+        if (!is_user_logged_in()) {
+            return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+        }
+        
+        $notepad_id = isset($_GET['notepad_id']) ? intval($_GET['notepad_id']) : 0;
+        
+        if (!$notepad_id) {
+            return new WP_Error('missing_params', 'Thiếu thông tin cần thiết', array('status' => 400));
+        }
+        
+        // Kiểm tra quyền sở hữu ghi chú
+        global $wpdb;
+        $table_notepads = $wpdb->prefix . 'secure_notepads_pro';
+        $current_user_id = get_current_user_id();
+        
+        $notepad = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT id FROM $table_notepads WHERE id = %d AND user_id = %d",
+                $notepad_id, $current_user_id
+            )
+        );
+        
+        if (!$notepad) {
+            return new WP_Error('not_owner', 'Bạn không có quyền xem thông tin chia sẻ của ghi chú này', array('status' => 403));
+        }
+        
+        // Lấy danh sách người dùng được chia sẻ
+        $table_shares = $wpdb->prefix . 'secure_notepad_pro_shares';
+        $shares = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT s.*, u.display_name, u.user_email
+                FROM $table_shares s
+                JOIN {$wpdb->users} u ON s.shared_with_id = u.ID
+                WHERE s.notepad_id = %d AND s.owner_id = %d",
+                $notepad_id, $current_user_id
+            )
+        );
+        
+        $shared_users = array();
+        foreach ($shares as $share) {
+            $shared_users[] = array(
+                'id' => $share->shared_with_id,
+                'display_name' => $share->display_name,
+                'email' => $share->user_email,
+                'can_edit' => (bool) $share->can_edit,
+                'shared_at' => $share->created_at
+            );
+        }
+        
+        return array(
+            'status' => 200,
+            'users' => $shared_users
+        );
+    }
 }
