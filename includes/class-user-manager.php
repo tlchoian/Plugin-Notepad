@@ -53,7 +53,37 @@ class SNSP_User_Manager {
                 'email' => $user->user_email
             );
         }
-        
+        /**
+ * Phương thức tìm kiếm người dùng để chia sẻ
+ * 
+ * @param string $keyword Từ khóa tìm kiếm
+ * @return array Danh sách người dùng tìm thấy
+ */
+public function search_users($keyword) {
+    global $wpdb;
+    
+    $current_user_id = get_current_user_id();
+    
+    // Tìm kiếm người dùng theo keyword
+    $args = array(
+        'search' => '*' . esc_attr($keyword) . '*',
+        'search_columns' => array('user_login', 'user_email', 'display_name'),
+        'number' => 10,
+        'exclude' => array($current_user_id), // Loại trừ người dùng hiện tại
+        'fields' => array('ID', 'user_login', 'user_email', 'display_name')
+    );
+    
+    $user_query = new WP_User_Query($args);
+    
+    $users = array();
+    foreach ($user_query->get_results() as $user) {
+        $users[] = array(
+            'id' => $user->ID,
+            'display_name' => $user->display_name,
+            'email' => $user->user_email,
+            'avatar_url' => get_avatar_url($user->ID, array('size' => 64))
+        );
+    }
         return $users;
     }
     
