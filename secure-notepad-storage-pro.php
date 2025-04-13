@@ -215,3 +215,17 @@ run_secure_notepad_storage_pro();
 
 // Khởi tạo controller API
 add_action('rest_api_init', array('SNSP_API_Controller', 'register_routes'));
+// Thêm vào phương thức register_scripts() hoặc phương thức enqueue_scripts nếu có
+public function enqueue_scripts() {
+    // Code hiện tại để đăng ký các file JS khác
+    
+    // Thêm file JS xử lý chia sẻ
+    wp_enqueue_script(
+        'secure-notepad-share',
+        plugin_dir_url(__FILE__) . 'js/secure-notepad-share.js',
+        array('jquery', 'secure-notepad'), // Đảm bảo file này được tải sau file JS chính
+        '1.0.0',
+        true
+    );
+}
+
