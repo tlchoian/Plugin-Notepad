@@ -145,4 +145,96 @@ class SNSP_DB_Manager {
         
         return false;
     }
+     // Cập nhật hàm tạo bảng để đảm bảo nó có các trường cần thiết
+    public static function create_tables() {
+        global $wpdb;
+        
+        $secure_notepads = $wpdb->prefix . 'secure_notepads_pro';
+        $secure_shares = $wpdb->prefix . 'secure_notepad_pro_shares';
+        
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        // SQL để tạo bảng notepad
+        $sql_notepads = "CREATE TABLE $secure_notepads (
+            id mediumint(9) NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) NOT NULL,
+            title varchar(255) NOT NULL DEFAULT 'Untitled Notepad',
+            content longtext NOT NULL NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            expires_at datetime NULL,
+            is_favorite tinyint(1) DEFAULT 0,
+            PRIMARY KEY  (id),
+            KEY user_id (user_id)
+        ) $charset_collate;";
+        
+        // SQL để tạo bảng chia sẻ
+        $sql_shares = "CREATE TABLE $secure_shares (
+            id mediumint(9) NOT NULL AUTO_INCREMENT,
+            notepad_id mediumint(9) NOT NULL,
+            owner_id bigint(20) NOT NULL NULL,
+            shared_with_id bigint(20) NOT NULL NULL,
+            can_edit tinyint(1) DEFAULT 0,
+            share_key varchar(255) NOT NULL NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL NULL,
+            PRIMARY KEY  (id),
+            KEY notepad_id (notepad_id),
+            KEY owner_id (owner_id),
+            KEY shared_with_id (shared_with_id)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql_notepads);
+        dbDelta($sql_shares);
+        
+        return true;
+    }
+    
+    // Thêm hàm để lấy danh sách notepad của người dùng
+    public function get_user_notepads($user_id = null) {
+        global $wpdb;
+        
+        if (!$user_id) {
+            $user_id = get_current_user_id();
+        }
+        
+        $table_name = $wpdb->prefix . 'secure_notepads_pro';
+        $results = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, title, created_at, updated_at, expires_at, is_favorite 
+                FROM $table_name 
+                WHERE user_id = %d 
+                ORDER BY is_favorite DESC, updated_at DESC",
+                $user_id
+            )
+        );
+        
+        return $results;
+    }
+    
+    // Thêm hàm để lấy danh sách notepad được chia sẻ với người dùng
+    public function get_shared_notepads($user_id = null) {
+        global $wpdb;
+        
+        if (!$user_id) {
+            $user_id = get_current_user_id();
+        }
+        
+        $notepads_table = $wpdb->prefix . 'secure_notepads_pro';
+        $shares_table = $wpdb->prefix . 'secure_notepad_pro_shares';
+        
+        $results = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT n.id, n.title, n.created_at, n.updated_at, n.expires_at, 
+                       s.can_edit, s.share_key, u.display_name as owner_name
+                FROM $shares_table s
+                JOIN $notepads_table n ON s.notepad_id = n.id
+                JOIN {$wpdb->users} u ON n.user_id = u.ID
+                WHERE s.shared_with_id = %d",
+                $user_id
+            )
+        );
+        
+        return $results;
+    }
 }
