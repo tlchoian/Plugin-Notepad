@@ -274,5 +274,73 @@ class SNSP_API_Controller {
             return new WP_Error('access_denied', 'Bạn không có quyền xóa notepad này', array('status' => 403));
         }
         
-        // Xóa tất cả chia sẻ
-        $
+     
+    // Cập nhật phương thức lấy danh sách ghi chú
+    public static function get_notepad_list() {
+        if (!is_user_logged_in()) {
+            return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+        }
+        
+        global $wpdb;
+        $table_notepads = $wpdb->prefix . 'secure_notepads_pro';
+        $user_id = get_current_user_id();
+        
+        // Lấy danh sách ghi chú của người dùng hiện tại
+        $user_notepads = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, title, created_at, updated_at, expires_at, is_favorite 
+                FROM $table_notepads
+                WHERE user_id = %d
+                ORDER BY is_favorite DESC, updated_at DESC",
+                $user_id
+            )
+        );
+        
+        // Lấy danh sách ghi chú được chia sẻ với người dùng
+        $db = new SNSP_DB_Manager();
+        $shared_notepads = $db->get_shared_notepads();
+        
+        return array(
+            'status' => 200,
+            'user_notepads' => $user_notepads,
+            'shared_notepads' => $shared_notepads
+        );
+    }
+    
+    // Thêm phương thức tạo notepad mới
+    public static function create_notepad() {
+        if (!is_user_logged_in()) {
+            return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+        }
+        
+        $user_id = get_current_user_id();
+        $title = isset($_POST['title']) ? sanitize_text_field($_POST['title']) : 'Untitled Notepad';
+        
+        global $wpdb;
+        $table_notepads = $wpdb->prefix . 'secure_notepads_pro';
+        
+        $result = $wpdb->insert(
+            $table_notepads,
+            array(
+                'user_id' => $user_id,
+                'title' => $title,
+                'content' => '',
+                'created_at' => current_time('mysql'),
+                'updated_at' => current_time('mysql')
+            ),
+            array('%d', '%s', '%s', '%s', '%s')
+        );
+        
+        if ($result) {
+            $notepad_id = $wpdb->insert_id;
+            return array(
+                'status' => 200,
+                'message' => 'Notepad created successfully',
+                'notepad_id' => $notepad_id,
+                'title' => $title
+            );
+        } else {
+            return new WP_Error('db_error', 'Error creating notepad', array('status' => 500));
+        }
+    }
+}
