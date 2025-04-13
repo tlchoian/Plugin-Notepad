@@ -44,6 +44,8 @@ class Secure_Notepad_Storage_Pro {
         
         // Đăng ký hooks
         $this->register_hooks();
+        // Đăng ký API endpoint tạo ghi chú mới
+add_action('wp_ajax_create_notepad', array('SNSP_API_Controller', 'create_notepad'));
     }
     
     // Load các file phụ thuộc
