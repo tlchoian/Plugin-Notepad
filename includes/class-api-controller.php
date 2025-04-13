@@ -561,3 +561,47 @@ class SNSP_API_Controller {
         );
     }
 }
+    /**
+ * Thêm phương thức tạo ghi chú mới vào class SNSP_API_Controller
+ */
+public static function create_notepad() {
+    if (!is_user_logged_in()) {
+        return new WP_Error('not_logged_in', 'Bạn phải đăng nhập để sử dụng tính năng này', array('status' => 401));
+    }
+    
+    // Kiểm tra nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'secure_notepad_nonce')) {
+        return new WP_Error('invalid_nonce', 'Yêu cầu không hợp lệ', array('status' => 403));
+    }
+    
+    $user_id = get_current_user_id();
+    $title = isset($_POST['title']) ? sanitize_text_field($_POST['title']) : 'Ghi chú mới';
+    
+    global $wpdb;
+    $table_notepads = $wpdb->prefix . 'secure_notepads_pro';
+    
+    $result = $wpdb->insert(
+        $table_notepads,
+        array(
+            'user_id' => $user_id,
+            'title' => $title,
+            'content' => '',
+            'created_at' => current_time('mysql'),
+            'updated_at' => current_time('mysql')
+        ),
+        array('%d', '%s', '%s', '%s', '%s')
+    );
+    
+    if ($result) {
+        $notepad_id = $wpdb->insert_id;
+        return array(
+            'status' => 200,
+            'message' => 'Đã tạo ghi chú thành công',
+            'notepad_id' => $notepad_id,
+            'title' => $title
+        );
+    } else {
+        return new WP_Error('db_error', 'Lỗi khi tạo ghi chú', array('status' => 500));
+    }
+}
+
